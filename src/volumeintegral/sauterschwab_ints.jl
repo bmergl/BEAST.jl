@@ -105,14 +105,38 @@ function momintegrals!(op::VIEOperator,
     test_local_space::RefSpace, trial_local_space::RefSpace,
     test_tetrahedron_element, trial_tetrahedron_element, out, strat::SauterSchwab3DStrategy)
 
+    lt = length(test_tetrahedron_element.vertices)
+    ls = length(trial_tetrahedron_element.vertices)
+
     #Find permutation of vertices to match location of singularity to SauterSchwab
-    J, I= SauterSchwab3D.reorder(strat.sing)
+    if lt == 4 && ls == 4   
+
+        I, J = SauterSchwab3D.reorder(strat.sing) # 6D integral: ∫∫∫_Ω  ∫∫∫_Ω
+        inttype = :ΩΩ
+
+    elseif lt == 3 && ls == 4   
+
+        J, I = SauterSchwab3D.reorder(strat.sing) # 5D integral: ∫∫_Γ ∫∫∫_Ω
+        inttype = :ΓΩ
+
+    elseif lt == 4 && ls == 3 
+          
+        I, J = SauterSchwab3D.reorder(strat.sing) # 5D integral: ∫∫∫_Ω ∫∫_Γ 
+        inttype = :ΩΓ
+
+    else
+        error("Format has to be tetrahedron-tetrahedron, triangle-tetrahedron or tetrahedron-triangle")
+
+        # TODO: add support for 4D integrals, but be careful with n̂!
+    end
+
       
     #Get permutation and rel. orientatio of DoFs 
     K,O1 = reorder_dof(test_local_space, I)
     L,O2 = reorder_dof(trial_local_space, J)
+
+
     #Apply permuation to elements
- 
     if length(I) == 4
         test_tetrahedron_element  = simplex(
             test_tetrahedron_element.vertices[I[1]],
@@ -124,28 +148,57 @@ function momintegrals!(op::VIEOperator,
             test_tetrahedron_element.vertices[I[1]],
             test_tetrahedron_element.vertices[I[2]],
             test_tetrahedron_element.vertices[I[3]])
+    else
+        error("SauterSchwab3D.reorder() does not work properly!")
     end
-
     #test_tetrahedron_element  = simplex(test_tetrahedron_element.vertices[I]...)
 
     if length(J) == 4
-    trial_tetrahedron_element  = simplex(
-        trial_tetrahedron_element.vertices[J[1]],
-        trial_tetrahedron_element.vertices[J[2]],
-        trial_tetrahedron_element.vertices[J[3]],
-        trial_tetrahedron_element.vertices[J[4]])
+        trial_tetrahedron_element  = simplex(
+            trial_tetrahedron_element.vertices[J[1]],
+            trial_tetrahedron_element.vertices[J[2]],
+            trial_tetrahedron_element.vertices[J[3]],
+            trial_tetrahedron_element.vertices[J[4]])
     elseif  length(J) == 3
         trial_tetrahedron_element  = simplex(
-        trial_tetrahedron_element.vertices[J[1]],
-        trial_tetrahedron_element.vertices[J[2]],
-        trial_tetrahedron_element.vertices[J[3]])
+            trial_tetrahedron_element.vertices[J[1]],
+            trial_tetrahedron_element.vertices[J[2]],
+            trial_tetrahedron_element.vertices[J[3]])
+    else
+        error("SauterSchwab3D.reorder() does not work properly!")
     end
-
     #trial_tetrahedron_element = simplex(trial_tetrahedron_element.vertices[J]...)
 
+
     #Define integral (returns a function that only needs barycentric coordinates)
-    igd = VIEIntegrand(test_tetrahedron_element, trial_tetrahedron_element,
+    if strat.sing isa SauterSchwab3D.Singularity6DFace
+        
+        tet = trial_tetrahedron_element
+        tangs = SVector{3,SVector{3,Float64}}(-tet.tangents[1],-tet.tangents[2],-tet.tangents[3])
+        vol = -tet.volume
+
+        trial_tetrahedron_element_inv = CompScienceMeshes.Simplex(tet.vertices,tangs,tet.normals,vol)
+
+        igd = VIEIntegrand_cf6d(test_tetrahedron_element, trial_tetrahedron_element, trial_tetrahedron_element_inv,
         op, test_local_space, trial_local_space)
+
+    elseif inttype == :ΩΩ
+
+        igd = VIEIntegrand_uv(test_tetrahedron_element, trial_tetrahedron_element,
+        op, test_local_space, trial_local_space)
+
+    elseif inttype == :ΓΩ
+
+        igd = VIEIntegrand_vu(test_tetrahedron_element, trial_tetrahedron_element,
+        op, test_local_space, trial_local_space)
+
+    elseif inttype == :ΩΓ
+
+        igd = VIEIntegrand_uv(test_tetrahedron_element, trial_tetrahedron_element,
+        op, test_local_space, trial_local_space)
+    
+    end
+
 
     #Evaluate integral
     Q = SauterSchwab3D.sauterschwab_parameterized(igd, strat)
@@ -156,7 +209,7 @@ function momintegrals!(op::VIEOperator,
             out[i,j] += Q[K[i],L[j]]*O1[i]*O2[j]
         end
     end
-    nothing
+    return nothing
 end
 
 function momintegrals!(biop::VIEOperator, tshs, bshs, tcell, bcell, z, strat::DoubleQuadRule)
