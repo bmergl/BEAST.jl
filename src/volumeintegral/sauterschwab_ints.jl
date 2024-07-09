@@ -149,7 +149,7 @@ function momintegrals!(op::VIEOperator,
             test_tetrahedron_element.vertices[I[2]],
             test_tetrahedron_element.vertices[I[3]])
     else
-        error("SauterSchwab3D.reorder() does not work properly!")
+        error("SauterSchwab3D.reorder() does not work properly!") # JAAAA.... könnte aber auch 4D int sein.....
     end
     #test_tetrahedron_element  = simplex(test_tetrahedron_element.vertices[I]...)
 
@@ -168,11 +168,11 @@ function momintegrals!(op::VIEOperator,
         error("SauterSchwab3D.reorder() does not work properly!")
     end
     #trial_tetrahedron_element = simplex(trial_tetrahedron_element.vertices[J]...)
-
+    
 
     #Define integral (returns a function that only needs barycentric coordinates)
     if strat.sing isa SauterSchwab3D.Singularity6DFace
-        
+
         tet = trial_tetrahedron_element
         tangs = SVector{3,SVector{3,Float64}}(-tet.tangents[1],-tet.tangents[2],-tet.tangents[3])
         vol = -tet.volume
