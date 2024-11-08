@@ -90,16 +90,69 @@ scalartype(op::VIEOperator) = typeof(op.gamma)
 
 export VIE
 
-struct VIEIntegrand{S,T,O,K,L}
+# struct VIEIntegrand{S,T,O,K,L}
+#     test_tetrahedron_element::S
+#     trial_tetrahedron_element::T
+#     op::O
+#     test_local_space::K
+#     trial_local_space::L
+# end
+
+
+# function (igd::VIEIntegrand)(u,v)
+
+#     #mesh points
+#     tgeo = neighborhood(igd.test_tetrahedron_element,v)
+#     bgeo = neighborhood(igd.trial_tetrahedron_element,u)
+
+#     #kernel values
+#     kerneldata = kernelvals(igd.op,tgeo,bgeo)
+
+#     #values & grad/div/curl of local shape functions
+#     tval = igd.test_local_space(tgeo) 
+#     bval = igd.trial_local_space(bgeo)
+
+#     #jacobian
+#     j = jacobian(tgeo) * jacobian(bgeo)
+    
+#     integrand(igd.op, kerneldata,tval,tgeo,bval,bgeo) * j
+# end
+
+struct VIEIntegrand_uv{S,T,O,K,L}
     test_tetrahedron_element::S
     trial_tetrahedron_element::T
     op::O
     test_local_space::K
     trial_local_space::L
 end
+function (igd::VIEIntegrand_uv)(u,v)
+
+    #mesh points
+    tgeo = neighborhood(igd.test_tetrahedron_element,u)
+    bgeo = neighborhood(igd.trial_tetrahedron_element,v)
+
+    #kernel values
+    kerneldata = kernelvals(igd.op,tgeo,bgeo)
+
+    #values & grad/div/curl of local shape functions
+    tval = igd.test_local_space(tgeo)
+    bval = igd.trial_local_space(bgeo)
+
+    #jacobian
+    j = jacobian(tgeo) * jacobian(bgeo)
+
+    integrand(igd.op, kerneldata,tval,tgeo,bval,bgeo) * j
+end
 
 
-function (igd::VIEIntegrand)(u,v)
+struct VIEIntegrand_vu{S,T,O,K,L}
+    test_tetrahedron_element::S
+    trial_tetrahedron_element::T
+    op::O
+    test_local_space::K
+    trial_local_space::L
+end
+function (igd::VIEIntegrand_vu)(u,v)
 
     #mesh points
     tgeo = neighborhood(igd.test_tetrahedron_element,v)
@@ -109,14 +162,51 @@ function (igd::VIEIntegrand)(u,v)
     kerneldata = kernelvals(igd.op,tgeo,bgeo)
 
     #values & grad/div/curl of local shape functions
-    tval = igd.test_local_space(tgeo) 
+    tval = igd.test_local_space(tgeo)
     bval = igd.trial_local_space(bgeo)
 
     #jacobian
     j = jacobian(tgeo) * jacobian(bgeo)
-    
+
     integrand(igd.op, kerneldata,tval,tgeo,bval,bgeo) * j
 end
+
+struct VIEIntegrand_cf6d{S,T,M,O,K,L}
+    test_tetrahedron_element::S
+    trial_tetrahedron_element::T
+    trial_tetrahedron_element_inv::M
+    op::O
+    test_local_space::K
+    trial_local_space::L
+end
+function (igd::VIEIntegrand_cf6d)(u,v) # spezielle reoder_dof????
+
+    #mesh points
+    tgeo = neighborhood(igd.test_tetrahedron_element,u)
+    bgeo = neighborhood(igd.trial_tetrahedron_element,v)
+    bgeo_refspace = neighborhood(igd.trial_tetrahedron_element_inv,v)
+
+    #kernel values
+    kerneldata = kernelvals(igd.op,tgeo,bgeo)
+
+    #values & grad/div/curl of local shape functions
+    tval = igd.test_local_space(tgeo)
+    #bval = igd.trial_local_space(bgeo) <---- geht nicht, denn bgeo ist MP mit non-CSM tet
+    bval = igd.trial_local_space(bgeo_refspace)
+
+    #jacobian
+    j = jacobian(tgeo) * jacobian(bgeo)
+
+    integrand(igd.op, kerneldata,tval,tgeo,bval,bgeo) * j
+end
+
+
+
+
+
+
+
+
 
 
 function integrand(viop::VIESingleLayer, kerneldata, tvals, tgeo, bvals, bgeo)
@@ -333,18 +423,26 @@ function qr_volume(op::VolumeOperator, g::RefSpace, f::RefSpace, i, τ, j, σ, q
     end
 
     #singData = SauterSchwab3D.Singularity{D,hits}(idx_t, idx_s )
-   @assert hits <= 4
+    @assert hits <= 4
+
+    hits == 0 && return DoubleQuadRule(qd[1][1,i], qd[2][1,j])
 
     hits == 4 && return SauterSchwab3D.CommonVolume6D_S(SauterSchwab3D.Singularity6DVolume(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[4]))
     hits == 3 && return SauterSchwab3D.CommonFace6D_S(SauterSchwab3D.Singularity6DFace(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
-    hits == 2 && return SauterSchwab3D.CommonEdge6D_S(SauterSchwab3D.Singularity6DEdge(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3],qd.sing_qp[4]))
+    # außer Betrieb !!! #hits == 2 && return SauterSchwab3D.CommonEdge6D_S(SauterSchwab3D.Singularity6DEdge(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3],qd.sing_qp[4]))
+    hits == 2 && return SauterSchwab3D.CommonEdge6D(SauterSchwab3D.Singularity6DEdge(idx_t,idx_s),(qd.sing_qp[1])) # Tensor Product
     hits == 1 && return SauterSchwab3D.CommonVertex6D_S(SauterSchwab3D.Singularity6DPoint(idx_t,idx_s),qd.sing_qp[3])
 
+    # # Tensor Product
+    # hits == 4 && return SauterSchwab3D.CommonVolume6D(SauterSchwab3D.Singularity6DVolume(idx_t,idx_s),(qd.sing_qp[1]))
+    # hits == 3 && return SauterSchwab3D.CommonFace6D(SauterSchwab3D.Singularity6DFace(idx_t,idx_s),(qd.sing_qp[1]))
+    # hits == 2 && return SauterSchwab3D.CommonEdge6D(SauterSchwab3D.Singularity6DEdge(idx_t,idx_s),(qd.sing_qp[1]))
+    # hits == 1 && return SauterSchwab3D.CommonVertex6D(SauterSchwab3D.Singularity6DPoint(idx_t,idx_s),(qd.sing_qp[1]))
 
 
-    return DoubleQuadRule(
-        qd[1][1,i],
-        qd[2][1,j])
+    # return DoubleQuadRule(
+    #     qd[1][1,i],
+    #     qd[2][1,j])
 
 end
 
@@ -381,14 +479,39 @@ function qr_boundary(op::BoundaryOperator, g::RefSpace, f::RefSpace, i, τ, j,  
     #singData = SauterSchwab3D.Singularity{D,hits}(idx_t, idx_s )
    
 
-    hits == 3 && return SauterSchwab3D.CommonFace5D_S(SauterSchwab3D.Singularity5DFace(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
-    hits == 2 && return SauterSchwab3D.CommonEdge5D_S(SauterSchwab3D.Singularity5DEdge(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
-    hits == 1 && return SauterSchwab3D.CommonVertex5D_S(SauterSchwab3D.Singularity5DPoint(idx_t,idx_s),(qd.sing_qp[3],qd.sing_qp[2]))
+    hits == 0 && return DoubleQuadRule(qd[1][1,i], qd[2][1,j])
+
+    if length(τ.vertices) == 3 && length(σ.vertices) == 4   # 5D integral: ∫∫_Γ ∫∫∫_Ω
+
+        hits == 3 && return SauterSchwab3D.CommonFace5D_S(SauterSchwab3D.Singularity5DFace(idx_s,idx_t),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
+        hits == 2 && return SauterSchwab3D.CommonEdge5D_S(SauterSchwab3D.Singularity5DEdge(idx_s,idx_t),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
+        hits == 1 && return SauterSchwab3D.CommonVertex5D_S(SauterSchwab3D.Singularity5DPoint(idx_s,idx_t),(qd.sing_qp[3],qd.sing_qp[2]))
+
+        # hits == 3 && return SauterSchwab3D.CommonFace5D(SauterSchwab3D.Singularity5DFace(idx_s,idx_t),(qd.sing_qp[1]))
+        # hits == 2 && return SauterSchwab3D.CommonEdge5D(SauterSchwab3D.Singularity5DEdge(idx_s,idx_t),(qd.sing_qp[1]))
+        # hits == 1 && return SauterSchwab3D.CommonVertex5D(SauterSchwab3D.Singularity5DPoint(idx_s,idx_t),(qd.sing_qp[1]))
 
 
-    return DoubleQuadRule(
-        qd[1][1,i],
-        qd[2][1,j])
+    elseif length(τ.vertices) == 4 && length(σ.vertices) == 3  # 5D integral: ∫∫∫_Ω ∫∫_Γ
 
+        hits == 3 && return SauterSchwab3D.CommonFace5D_S(SauterSchwab3D.Singularity5DFace(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
+        hits == 2 && return SauterSchwab3D.CommonEdge5D_S(SauterSchwab3D.Singularity5DEdge(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
+        hits == 1 && return SauterSchwab3D.CommonVertex5D_S(SauterSchwab3D.Singularity5DPoint(idx_t,idx_s),(qd.sing_qp[3],qd.sing_qp[2]))
+
+        # hits == 3 && return SauterSchwab3D.CommonFace5D(SauterSchwab3D.Singularity5DFace(idx_t,idx_s),(qd.sing_qp[1]))
+        # hits == 2 && return SauterSchwab3D.CommonEdge5D(SauterSchwab3D.Singularity5DEdge(idx_t,idx_s),(qd.sing_qp[1]))
+        # hits == 1 && return SauterSchwab3D.CommonVertex5D(SauterSchwab3D.Singularity5DPoint(idx_t,idx_s),(qd.sing_qp[1]))
+
+    else
+        error("qr_boundary needs a tetrahedron and a triangle as input!")
+    end
+
+    # hits == 3 && return SauterSchwab3D.CommonFace5D_S(SauterSchwab3D.Singularity5DFace(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
+    # hits == 2 && return SauterSchwab3D.CommonEdge5D_S(SauterSchwab3D.Singularity5DEdge(idx_t,idx_s),(qd.sing_qp[1],qd.sing_qp[2],qd.sing_qp[3]))
+    # hits == 1 && return SauterSchwab3D.CommonVertex5D_S(SauterSchwab3D.Singularity5DPoint(idx_t,idx_s),(qd.sing_qp[3],qd.sing_qp[2]))
+
+    # return DoubleQuadRule(
+    #     qd[1][1,i],
+    #     qd[2][1,j])
 end
 
