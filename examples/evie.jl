@@ -47,9 +47,17 @@ Z = range(-1,1,length=100)
 Y = range(-1,1,length=100)
 nfpoints = [point(0,y,z) for  y in Y, z in Z]
 
+@profview BEAST.grideval(nfpoints,u,X)
+
 Enear = BEAST.grideval(nfpoints,u,X)
 Enear = reshape(Enear,100,100)
 
 contour(real.(getindex.(Enear,1)))
 heatmap(Z, Y, real.(getindex.(Enear,1)), clim=(0.0,1.0))
+
+
+
+
+
+
 

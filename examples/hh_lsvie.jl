@@ -119,5 +119,5 @@ plot!(x, Φ_MoM_version1_x, label = "MoM: S=I+B+V, boundary+volume")
 plot!(x, Φ_MoM_version2_x, label = "MoM: S=I+Y, gradgreen")
 xlims!(0.0, 1.0) # sphere center to radius r
 ylims!(-0.3, 0.0)
-title!("Potential Φ(x, y0, z0)")
-xlabel!("x")
+title!("Potential Φ(r)")
+xlabel!("r")

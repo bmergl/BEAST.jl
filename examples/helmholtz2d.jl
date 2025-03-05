@@ -1,6 +1,6 @@
 using CompScienceMeshes, BEAST
 
-h = 2π / 51; Γ = meshcircle(1.0, h)
+h = 2π / 6; Γ = meshcircle(1.0, h)
 X, Y = lagrangecxd0(Γ), lagrangec0d1(Γ)
 
 κ = 1.0
