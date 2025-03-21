@@ -242,7 +242,7 @@ function momintegrals!(out, op::VIEOperator,
         
         tet = trial_tetrahedron_element
         tangs = SVector{3,SVector{3,Float64}}(-tet.tangents[1],-tet.tangents[2],-tet.tangents[3])
-        vol = -tet.volume
+        vol = tet.volume 
 
         trial_tetrahedron_element_inv = CompScienceMeshes.Simplex(tet.vertices,tangs,tet.normals,vol)
 
